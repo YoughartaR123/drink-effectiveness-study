@@ -1,19 +1,34 @@
-# ================================================
-# Project: drink-effectiveness-study
-# Author: Yougharta
-# ================================================
-
+import streamlit as st
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 import matplotlib.pyplot as plt
 import math
-from colorama import Fore, Style
 
+# Set page config
+st.set_page_config(page_title="Drink Effectiveness Study", layout="wide")
 
-
-
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .reportview-container {
+        background: #f0f2f6;
+    }
+    .sidebar .sidebar-content {
+        background: #ffffff;
+    }
+    .big-font {
+        font-size:18px !important;
+    }
+    .result-box {
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 10px 0px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ===============================
@@ -38,7 +53,7 @@ def cohens_d_paired(x_before, x_after):
 
 
 def cliffs_delta(x, y):
-    """Cliff’s delta for non-parametric effect size."""
+    """Cliff's delta for non-parametric effect size."""
     n_x, n_y = len(x), len(y)
     gt = lt = 0
     for xi in x:
@@ -63,146 +78,207 @@ def find_most_effective_group(effects: dict):
 
 
 # ===============================
-# 2. Load & Prepare Data
+# 2. Streamlit App
 # ===============================
 
+def main():
+    st.title("☕ Drink Effectiveness Study")
+    st.markdown("""
+    This app analyzes the effectiveness of different drinks (Regular Coffee, Decaf Coffee, and Energy Drink) 
+    on productivity (measured by tasks completed per hour) using a within-subjects design.
+    """)
 
-# Simulate data (reproducible)
+    # Sidebar controls
+    st.sidebar.header("Simulation Parameters")
+    n_participants = st.sidebar.slider("Number of Participants", 10, 100, 20)
+    baseline_mean = st.sidebar.slider("Baseline Productivity (tasks/hour)", 30, 70, 50)
+    baseline_std = st.sidebar.slider("Baseline Std Dev", 1, 10, 5)
+    within_sd = st.sidebar.slider("Within-Subject Noise", 1.0, 5.0, 3.0)
+    outlier_percent = st.sidebar.slider("Outlier Percentage", 0.0, 0.2, 0.07)
+    alpha = st.sidebar.slider("Significance Level (α)", 0.01, 0.10, 0.05)
 
+    # Simulate data
+    np.random.seed(42)
+    participants = np.arange(1, n_participants + 1)
+    baseline = np.random.normal(loc=baseline_mean, scale=baseline_std, size=n_participants)
 
-np.random.seed(42)
-n_participants = 20
-participants = np.arange(1, n_participants + 1)
+    # true (population) effects by drink (small differences)
+    effects = {
+        'Regular': 1.5,  # +1.5 tasks
+        'Decaf': -0.5,  # -0.5 tasks
+        'Energy': 3.0  # +3.0 tasks
+    }
 
-# baseline productivity for each participant (tasks/hour)
-baseline = np.random.normal(loc=50, scale=5, size=n_participants)
+    # create long-format dataframe
+    rows = []
+    for i, subj in enumerate(participants):
+        for drink, eff in effects.items():
+            val = baseline[i] + eff + np.random.normal(0, within_sd)
+            rows.append({'participant': subj, 'drink': drink, 'tasks': val})
 
-# true (population) effects by drink (small differences)
-effects = {
-    'Regular':  1.5,   # +1.5 tasks
-    'Decaf':   -0.5,   # -0.5 tasks
-    'Energy':   3.0    # +3.0 tasks
-}
+    df = pd.DataFrame(rows)
 
-# within-subject noise (measurement variability)
-within_sd = 3.0
+    # inject outliers
+    n_obs = len(df)
+    n_outliers = max(1, int(n_obs * outlier_percent))
+    outlier_idx = np.random.choice(df.index, size=n_outliers, replace=False)
+    for idx in outlier_idx:
+        df.at[idx, 'tasks'] += np.random.choice([20, -15])  # big jump
 
-# create long-format dataframe
-rows = []
-for i, subj in enumerate(participants):
-    for drink, eff in effects.items():
-        val = baseline[i] + eff + np.random.normal(0, within_sd)
-        rows.append({'participant': subj, 'drink': drink, 'tasks': val})
+    # shuffle rows
+    df = df.sample(frac=1, random_state=1).reset_index(drop=True)
 
-df = pd.DataFrame(rows)
+    # separate each group
+    group_A = df[df['drink'] == 'Regular']['tasks'].values
+    group_B = df[df['drink'] == 'Decaf']['tasks'].values
+    group_C = df[df['drink'] == 'Energy']['tasks'].values
 
-# inject outliers into ~7% of observations
-n_obs = len(df)
-n_outliers = max(1, int(n_obs * 0.07))
-outlier_idx = np.random.choice(df.index, size=n_outliers, replace=False)
-# randomly choose some outliers high, some low
-for idx in outlier_idx:
-    df.at[idx, 'tasks'] += np.random.choice([20, -15])  # big jump
+    # Display raw data
+    if st.checkbox("Show Raw Data"):
+        st.dataframe(df)
 
-# shuffle rows so order is not grouped
-df = df.sample(frac=1, random_state=1).reset_index(drop=True)
+    # ===============================
+    # 3. Visualizations (EDA)
+    # ===============================
+    st.header("Exploratory Data Analysis")
 
-#separate each group
-group_A = df[df['drink'] == 'Regular']['tasks'].values
-group_B = df[df['drink'] == 'Decaf']['tasks'].values
-group_C = df[df['drink'] == 'Energy']['tasks'].values
+    col1, col2 = st.columns(2)
 
+    with col1:
+        st.subheader("Boxplot with Swarmplot")
+        fig1, ax1 = plt.subplots(figsize=(10, 5))
+        sns.boxplot(x="drink", y="tasks", data=df, palette="Set2", ax=ax1)
+        sns.swarmplot(x="drink", y="tasks", data=df, color=".25", ax=ax1)
+        ax1.set_title("Distribution of Tasks Completed by Drink Type")
+        st.pyplot(fig1)
 
-# ===============================
-# 3. Visualizations (EDA)
-# ===============================
+    with col2:
+        st.subheader("Violin Plot")
+        fig2, ax2 = plt.subplots(figsize=(10, 5))
+        sns.violinplot(x="drink", y="tasks", data=df, palette="Set3", inner="quartile", ax=ax2)
+        ax2.set_title("Violin Plot: Task Distribution per Drink")
+        st.pyplot(fig2)
 
-plt.figure(figsize=(10, 5))
-sns.boxplot(x="drink", y="tasks", data=df, palette="Set2")
-sns.swarmplot(x="drink", y="tasks", data=df, color=".25")
-plt.title("Distribution of Tasks Completed by Drink Type")
-plt.show()
+    # ===============================
+    # 4. Assumption Checks
+    # ===============================
+    st.header("Statistical Assumption Checks")
 
-plt.figure(figsize=(10, 5))
-sns.violinplot(x="drink", y="tasks", data=df, palette="Set3", inner="quartile")
-plt.title("Violin Plot: Task Distribution per Drink")
-plt.show()
-
-
-
-# ===============================
-# 4. Assumption Checks
-# ===============================
-
-print(Fore.CYAN + Style.BRIGHT + "\n=== Normality Check (paired differences) ===" + Style.RESET_ALL)
-diffs = {
-    "A-B": group_A - group_B,
-    "A-C": group_A - group_C,
-    "B-C": group_B - group_C
-}
-for name, d in diffs.items():
-    p_shapiro = stats.shapiro(d)[1]
-    print(f"{name}: Shapiro-Wilk p = {p_shapiro:.4f}")
-
-print(Fore.CYAN + Style.BRIGHT + "\n=== Variance (Sphericity Proxy) ===" + Style.RESET_ALL)
-# Note: For real repeated-measures ANOVA, use Mauchly’s test (statsmodels).
-levene_p = stats.levene(group_A, group_B, group_C)[1]
-print(f"Levene’s p = {levene_p:.4f}")
-
-alpha = 0.05
-all_normal = all(stats.shapiro(d)[1] > alpha for d in diffs.values())
-equal_var = levene_p > alpha
-
-# ===============================
-# 5. Hypothesis Testing
-# ===============================
-
-if all_normal and equal_var:
-    test_name = "Repeated-measures ANOVA"
-    print(Fore.CYAN + Style.BRIGHT + f"\n=== Using {test_name} ===" + Style.RESET_ALL)
-    stat, p_value = stats.f_oneway(group_A, group_B, group_C)
-else:
-    test_name = "Friedman Test"
-    print(Fore.CYAN + Style.BRIGHT + f"\n=== Using {test_name} ===" + Style.RESET_ALL)
-    stat, p_value = stats.friedmanchisquare(group_A, group_B, group_C)
-
-print(f"Statistic = {stat:.4f}, p = {p_value:.4f}")
-
-# ===============================
-# 6. Post-hoc Analysis & Effect Size
-# ===============================
-
-if p_value < alpha:
-    print(Fore.RED + Style.BRIGHT + "\nSignificant differences detected!" + Style.RESET_ALL)
-
-    if test_name == "Repeated-measures ANOVA":
-        effects = {
-            ('A', 'B'): cohens_d_paired(group_A, group_B),
-            ('A', 'C'): cohens_d_paired(group_A, group_C),
-            ('B', 'C'): cohens_d_paired(group_B, group_C)
+    with st.expander("Normality Check (paired differences)"):
+        diffs = {
+            "Regular-Decaf": group_A - group_B,
+            "Regular-Energy": group_A - group_C,
+            "Decaf-Energy": group_B - group_C
         }
+
+        normality_results = []
+        for name, d in diffs.items():
+            p_shapiro = stats.shapiro(d)[1]
+            normality_results.append({
+                "Comparison": name,
+                "Shapiro-Wilk p-value": p_shapiro,
+                "Normal?": p_shapiro > alpha
+            })
+
+        st.dataframe(pd.DataFrame(normality_results))
+
+    with st.expander("Variance Homogeneity (Sphericity Proxy)"):
+        levene_p = stats.levene(group_A, group_B, group_C)[1]
+        box_color = "#e6f7ff"  # Very light blue background
+        border_color = "#1890ff" if levene_p > alpha else "#ff4d4f"  # Blue/red border
+        text_color = "#1890ff" if levene_p > alpha else "#ff4d4f"  # Blue/red text
+
+        st.markdown(f"""
+        <div style="background-color: {box_color}; 
+                    border-left: 4px solid {border_color};
+                    padding: 12px;
+                    border-radius: 4px;
+                    margin: 8px 0;">
+            <p style="font-size: 16px; margin: 0; color: #333;">Levene's test p-value = <strong>{levene_p:.4f}</strong></p>
+            <p style="font-size: 16px; margin: 8px 0 0 0; color: {text_color}; font-weight: 500;">
+                Variances are {'equal' if levene_p > alpha else 'not equal'} (α = {alpha})
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    all_normal = all(stats.shapiro(d)[1] > alpha for d in diffs.values())
+    equal_var = levene_p > alpha
+
+    # ===============================
+    # 5. Hypothesis Testing
+    # ===============================
+    st.header("Hypothesis Testing Results")
+
+    if all_normal and equal_var:
+        test_name = "Repeated-measures ANOVA"
+        stat, p_value = stats.f_oneway(group_A, group_B, group_C)
     else:
-        effects = {
-            ('A', 'B'): cliffs_delta(group_A, group_B),
-            ('A', 'C'): cliffs_delta(group_A, group_C),
-            ('B', 'C'): cliffs_delta(group_B, group_C)
-        }
+        test_name = "Friedman Test"
+        stat, p_value = stats.friedmanchisquare(group_A, group_B, group_C)
 
-    # Effect sizes
-    for pair, eff in effects.items():
-        print(f"Effect size {pair}: {eff:.4f}")
+    result_box_color = "#f6ffed"  # Very light green background
+    result_border = "#52c41a" if p_value < alpha else "#ff4d4f"  # Green/red border
+    result_text = "#52c41a" if p_value < alpha else "#ff4d4f"  # Green/red text
 
-    avg_magnitude, most_effective = find_most_effective_group(effects)
-    print("\nAverage magnitudes:", avg_magnitude)
-    print(Fore.CYAN + Style.BRIGHT + f"\nMost effective drink: {most_effective}" + Style.RESET_ALL)
+    st.markdown(f"""
+    <div style="background-color: {result_box_color}; 
+                border-left: 4px solid {result_border};
+                padding: 12px;
+                border-radius: 4px;
+                margin: 12px 0;">
+        <p style="font-size: 16px; margin: 0; color: #333;">Test used: <strong>{test_name}</strong></p>
+        <p style="font-size: 16px; margin: 8px 0; color: #333;">
+            Test statistic = <strong>{stat:.4f}</strong>, p-value = <strong>{p_value:.4f}</strong>
+        </p>
+        <p style="font-size: 16px; margin: 0; color: {result_text}; font-weight: 500;">
+            Result: {'Significant' if p_value < alpha else 'Not significant'} (α = {alpha})
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Visualization: Pairwise Effect Sizes
-    plt.figure(figsize=(8, 5))
-    sns.barplot(x=list(map(str, effects.keys())), y=list(effects.values()), palette="coolwarm")
-    plt.axhline(0, color="black", linestyle="--")
-    plt.title("Pairwise Effect Sizes Between Drinks")
-    plt.ylabel("Effect Size (Cohen's d / Cliff's delta)")
-    plt.show()
+    # ===============================
+    # 6. Post-hoc Analysis & Effect Size
+    # ===============================
+    if p_value < alpha:
+        st.success("Significant differences detected between drink types!")
 
-else:
-    print(Fore.CYAN + Style.BRIGHT + "\nNo significant difference between drinks." + Style.RESET_ALL)
+        if test_name == "Repeated-measures ANOVA":
+            effects = {
+                ('Regular', 'Decaf'): cohens_d_paired(group_A, group_B),
+                ('Regular', 'Energy'): cohens_d_paired(group_A, group_C),
+                ('Decaf', 'Energy'): cohens_d_paired(group_B, group_C)
+            }
+            effect_name = "Cohen's d"
+        else:
+            effects = {
+                ('Regular', 'Decaf'): cliffs_delta(group_A, group_B),
+                ('Regular', 'Energy'): cliffs_delta(group_A, group_C),
+                ('Decaf', 'Energy'): cliffs_delta(group_B, group_C)
+            }
+            effect_name = "Cliff's delta"
+
+        # Display effect sizes
+        st.subheader(f"Pairwise Effect Sizes ({effect_name})")
+
+        effect_df = pd.DataFrame([{"Group 1": k[0], "Group 2": k[1], "Effect Size": v}
+                                  for k, v in effects.items()])
+        st.dataframe(effect_df.style.format({"Effect Size": "{:.4f}"}))
+
+        # Find most effective group
+        avg_magnitude, most_effective = find_most_effective_group(effects)
+        st.success(f"Most effective drink: {most_effective}")
+
+        # Visualization: Pairwise Effect Sizes
+        st.subheader("Effect Size Visualization")
+        fig3, ax3 = plt.subplots(figsize=(8, 5))
+        sns.barplot(x=list(map(str, effects.keys())), y=list(effects.values()), palette="coolwarm", ax=ax3)
+        ax3.axhline(0, color="black", linestyle="--")
+        ax3.set_title(f"Pairwise Effect Sizes Between Drinks ({effect_name})")
+        ax3.set_ylabel("Effect Size")
+        st.pyplot(fig3)
+    else:
+        st.info("No significant difference detected between drink types.")
+
+
+if __name__ == "__main__":
+    main()
