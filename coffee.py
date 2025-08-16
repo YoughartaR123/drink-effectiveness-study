@@ -1,5 +1,5 @@
 # ================================================
-# Project: statistical-analysis-drink-productivity
+# Project: drink-effectiveness-study
 # Author: Yougharta
 # ================================================
 
