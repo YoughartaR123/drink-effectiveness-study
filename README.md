@@ -1,7 +1,9 @@
 
 
-## 📌 Project Overview
-This project investigates **whether different types of drinks (Regular Coffee, Decaf, and Energy Drinks) affect productivity**, measured by the number of tasks completed.  
+## ☕ Caffeine Productivity Analysis (Streamlit App)
+An interactive statistical analysis app built with Streamlit to explore whether different drinks (Regular coffee, Decaf, and Energy drinks) influence productivity (measured by number of tasks completed).
+
+The app applies statistical hypothesis testing and effect size analysis to uncover significant differences between groups.  
 
 The workflow follows a **data analyst’s approach**:
 1. **Exploratory Data Analysis (EDA)** with visualizations.  
@@ -77,12 +79,11 @@ Example (long format):
 
 ## 📦 Installation & Usage
 ```bash
-# Clone repo
-git clone https://github.com/yourusername/drink-productivity-analysis.git
-cd drink-productivity-analysis
-
-# Install dependencies
+git clone https://github.com/YoughartaR123/drink-effectiveness-study.git
+cd caffeine-productivity-analysis
 pip install -r requirements.txt
 
-# Run analysis
-python analysis.py
+
+# Run the app
+streamlit run app.py
+

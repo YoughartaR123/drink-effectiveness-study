@@ -1,6 +1,6 @@
-echo "streamlit==1.36.0
-numpy==1.26.4
-pandas==2.2.2
+streamlit
+numpy
+pandas
 scipy
-seaborn==0.13.2
-matplotlib==3.9.2" > requirements.txt
+seaborn
+matplotlib
