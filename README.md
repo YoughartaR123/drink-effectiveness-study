@@ -2,6 +2,7 @@
 
 ## ☕ Caffeine Productivity Analysis (Streamlit App)
 An interactive statistical analysis app built with Streamlit to explore whether different drinks (Regular coffee, Decaf, and Energy drinks) influence productivity (measured by number of tasks completed).
+to see a live simulation , check this link https://drink-effectiveness-study.streamlit.app/
 
 The app applies statistical hypothesis testing and effect size analysis to uncover significant differences between groups.  
 
